@@ -1,3 +1,4 @@
+open Graph;;
 open Formula;;
 module BDD = struct
 		type sat_assignment = string list
@@ -6,6 +7,18 @@ module BDD = struct
 		type robdd = int ;;
 
 		exception Not_implemented
+
+
+(*		let bddFromExpr bexpr order = f_robdd_prime (bexpr) order  ;;
+
+
+		let sat_count bdd = f_count bdd ;;
+		let all_sat bdd = f_asat bdd ;;
+		let any_sat bdd =  f_sat bdd ;;
+
+
+		let to_dot bdd = raise Not_implemented;;*)
+
 
 		exception Cant_be_evaluated
 		exception No_valid_assingment
@@ -104,19 +117,126 @@ module BDD = struct
 		| [] -> list_p@[[Hashtbl.find var_table (node)]]
 		| head :: tail -> add_var node tail (list_p@[head@[Hashtbl.find var_table (node)]]);;
 
-		let rec f_all_sat node list_of_l = if node = 0 then (list_of_l) else if node = 1 then (list_of_l@[]) else list_of_l@(f_all_sat (get_low node) (list_of_l))@(add_var (get_var node) (f_all_sat (get_high node) list_of_l) ([]));;
+		let rec f_all_sat node list_of_l = if node = 0 then (list_of_l@[["-1";]]) else if node = 1 then (list_of_l@[]) else list_of_l@(f_all_sat (get_low node) (list_of_l))@(add_var (get_var node) (f_all_sat (get_high node) list_of_l) ([]));;
 
 		let f_asat node = f_all_sat node ([]);;
 
-		let bddFromExpr bexpr order = f_robdd_prime (bexpr) order  ;;
 
 
-		let sat_count bdd = f_count bdd ;;
-		let all_sat bdd = f_asat bdd ;;
-		let any_sat bdd =  f_sat bdd ;;
+		let rec get_val_list l size start = if (start = size) then (l@[size]) else (if (Hashtbl.mem table start) then (get_val_list (l@[start]) size (start+1)) else (get_val_list l size (start+1)));;
+
+		(*let z = f_robdd_prime (Program.OprBinary(Program.AND,Program.OprBinary(Program.IFF,Program.Variable("a"),Program.Variable("b")),Program.OprBinary(Program.IFF,Program.Variable("c"),Program.Variable("d")))) (["a";"c";"b";"d";]);;*)
+		(*let init_table  =  get_val_list ([]) (z) 2 ;;*)
+		let rec print_list_of_int l = match l with
+		| [x] -> print_int x
+		| head :: tail -> print_int head;print_list_of_int tail;;
 
 
-		let to_dot bdd = raise Not_implemented;;
+		module Node = struct
+		   type t = int
+		   let compare = Pervasives.compare
+		   let hash = Hashtbl.hash
+		   let equal = (=)
+		end          ;;
+
+		module Edge = struct
+		   type t = string
+		   let compare = Pervasives.compare
+		   let equal = (=)
+		   let default = ""
+		end
+		;;
+
+		module G =  Graph.Persistent.Digraph.ConcreteBidirectionalLabeled(Node)(Edge)
+		let g = G.empty
+
+
+		let rec make_edges l g = match l with
+		| [x] -> (match Hashtbl.find table x with | (a,b,c) -> let g = G.add_edge g x b in G.add_edge g x c)
+		| head :: tail ->( match (Hashtbl.find table (head)) with | (a,b,c) -> let g = G.add_edge g (head) (b) in let g = G.add_edge g (head) (c) in (make_edges tail g))
+		;;
+
+		module Dot = Graph.Graphviz.Dot(struct
+		   include G (* use the graph module from above *)
+		   let edge_attributes (_, e, _) = [`Label e; `Color 4711]
+		   let default_edge_attributes _ = []
+		   let get_subgraph _ = None
+		   let vertex_attributes _ = [`Shape `Box]
+		   let vertex_name v = string_of_int v
+		   let default_vertex_attributes _ = []
+		  let graph_attributes _ = []
+		end);;
+
+		let make_dot bdd = let init_tab  =  get_val_list ([]) (bdd) 2 in let g = make_edges init_tab g in
+		   let file = open_out_bin "bdd.dot" in
+		   Dot.output_graph file g;;
+
+
+			 let bddFromExpr bexpr order = f_robdd_prime (bexpr) order  ;;
+
+
+			 		let sat_count bdd = f_count bdd ;;
+			 		let all_sat bdd = f_asat bdd ;;
+			 		let any_sat bdd =  f_sat bdd ;;
+
+
+		let to_dot bdd = make_dot bdd;;
+
+		let s_prime = f_robdd (Program.OprBinary(Program.OR,Program.Variable("a"),Program.Variable("b"))) (["a";"b";]);;
+
+		let rec iterate_hash size start l = if (start = size) then (match Hashtbl.find table start with | (a,b,c) -> if List.mem (Hashtbl.find var_table a) l then l else (l@[Hashtbl.find var_table a]) ) else (match Hashtbl.find table start with | (a,b,c) -> if List.mem (Hashtbl.find var_table a) l then iterate_hash size (start+1) l else iterate_hash size (start+1) (l@[Hashtbl.find var_table a]) ) ;;
+		let rec get_all_vars start l = if (start = Hashtbl.length var_table) then l@[Hashtbl.find var_table start] else get_all_vars (start+1) l@[Hashtbl.find var_table start];;
+		let rec trim_l l1 l2 h = match l1 with
+		| [x] -> if List.mem x l2 then h else h@[x]
+		| head :: tail -> if List.mem head l2 then trim_l tail l2 h else trim_l tail l2 h@[head];;
+		print_int s_prime;;
+		let p = match Hashtbl.find table 2 with (a,b,c) -> a;;
+		print_int p;;
+		print_string (Hashtbl.find var_table p);;
+
+		let rec subset l =
+			match l with
+			| [] -> [[]]
+			| (h::tl) ->
+									let second = subset tl in
+									List.append (List.map (fun x -> h::x) second) second;;
+
+		let rec remove_x l y = match l with
+		| [] -> []
+		| [x] -> if List.mem "-1" x then y else y@[x]
+		| head :: tail -> if List.mem "-1" head then (remove_x tail y) else (remove_x tail y@[head]);;
+
+		let rec comb_l l h j= match h with
+		| [x] -> j@[l@x]
+		| head :: tail -> comb_l l tail j@[l@head];;
+
+		let rec combine_list l1 l2 y = match l2 with
+		| [x] -> y@(comb_l x l1 [])
+		| head :: tail -> combine_list l1 tail y@(comb_l head l1 []) ;;
+		let y_prime = trim_l (get_all_vars 1 ([])) (iterate_hash s_prime 2 ([])) ([]);;
+		let list_un = subset (y_prime);;
+		let list_imp = remove_x (f_asat s_prime) ([]);;
+
+		let z = combine_list list_imp list_un ([]);;
+
+		let rec print_list_x l = match l with
+		| [x] -> print_string x; print_string ";"
+		| head :: tail -> print_string head;print_string ";";print_list_x tail;;
+
+		let rec print_l_l l = match l with
+		| [x] -> print_list_x x;print_string "\n"
+		| head :: tail -> print_list_x head;print_string "\n";print_l_l tail;;
+
+		let y = print_l_l z;;
+
+		print_string "\n***\n";;
+
+		print_list_x (iterate_hash s_prime 2 ([]));;
+		print_string "\n";
+		print_string "\n***\n";;
+		print_l_l list_imp;;
+		print_string "\n***\n";;
+		print_l_l (f_asat s_prime);;
 
 end  ;;
 
