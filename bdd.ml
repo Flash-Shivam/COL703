@@ -72,6 +72,8 @@ module BDD = struct
 		let table2 = Hashtbl.create 1000;;
 		let var_table = Hashtbl.create 1000;;
 
+		let global_flag = Hashtbl.create 1;;
+
 
 
 
@@ -107,23 +109,92 @@ module BDD = struct
 
 		let f_robdd bexpr order = let f = Hashtbl.clear var_table in let v = fill_var_table order (1) in let r = Hashtbl.clear table in let t = Hashtbl.clear table2 in let m = Hashtbl.add table (0) (List.length order+1,-1,-1) in let n = Hashtbl.add table (1) (List.length order+1,-1,-1) in robddFromExpr bexpr order (List.length order) (1);;
 
-		let f_robdd_prime bexpr order = let f = Hashtbl.clear var_table in let v = fill_var_table order (1) in let r = Hashtbl.clear table in let t = Hashtbl.clear table2 in let m = Hashtbl.add table (0) (List.length order+1,-1,-1) in let n = Hashtbl.add table (1) (List.length order+1,-1,-1) in robddFromExpr_prime bexpr order (List.length order) (1) ([]);;
-
+		let f_robdd_prime bexpr order = let ry = Hashtbl.clear global_flag in let f = Hashtbl.clear var_table in let v = fill_var_table order (1) in let r = Hashtbl.clear table in let t = Hashtbl.clear table2 in let m = Hashtbl.add table (0) (List.length order+1,-1,-1) in let n = Hashtbl.add table (1) (List.length order+1,-1,-1) in let p = feval_prime bexpr order in let z = if p = 1 then Hashtbl.add global_flag (0) (1) else Hashtbl.add global_flag (0) (0) in robddFromExpr_prime bexpr order (List.length order) (1) ([]);;
+		(*let f_robdd_prime bexpr order = let f = Hashtbl.clear var_table in let v = fill_var_table order (1) in let r = Hashtbl.clear table in let t = Hashtbl.clear table2 in let m = Hashtbl.add table (0) (List.length order+1,-1,-1) in let n = Hashtbl.add table (1) (List.length order+1,-1,-1) in let p = feval_prime bexpr order in let z = if p = 1 then Hashtbl.add table 900 (1,0,0) else Hashtbl.add table 900 (0,0,0) in  robddFromExpr_prime bexpr order (List.length order) (1) ([]);;
+		*)
 		let rec f_any_sat node list_l = if node = 0 then raise No_valid_assingment else if node = 1 then list_l else if ((get_low node) = 0) then f_any_sat (get_high node) (list_l@[(Hashtbl.find var_table (get_var node))]) else  f_any_sat (get_low node) (list_l);;
 
 		let f_sat node = f_any_sat node ([]);;
 
 		let rec add_var node list_l list_p = match list_l with
-		| [] -> list_p@[[Hashtbl.find var_table (node)]]
+		| [[]] -> list_p@[[Hashtbl.find var_table (node)]]
+		| [] -> list_p
 		| head :: tail -> add_var node tail (list_p@[head@[Hashtbl.find var_table (node)]]);;
 
-		let rec f_all_sat node list_of_l = if node = 0 then (list_of_l@[["-1";]]) else if node = 1 then (list_of_l@[]) else list_of_l@(f_all_sat (get_low node) (list_of_l))@(add_var (get_var node) (f_all_sat (get_high node) list_of_l) ([]));;
+		let rec f_all_sat node list_of_l = if node = 0 then (list_of_l@[["-1";]]) else if node = 1 then (list_of_l@[[]]) else list_of_l@(f_all_sat (get_low node) (list_of_l))@(add_var (get_var node) (f_all_sat (get_high node) list_of_l) ([]));;
 
 		let f_asat node = f_all_sat node ([]);;
 
 
-
 		let rec get_val_list l size start = if (start = size) then (l@[size]) else (if (Hashtbl.mem table start) then (get_val_list (l@[start]) size (start+1)) else (get_val_list l size (start+1)));;
+
+		(*let z = f_robdd_prime (Program.OprBinary(Program.AND,Program.OprBinary(Program.IFF,Program.Variable("a"),Program.Variable("b")),Program.OprBinary(Program.IFF,Program.Variable("c"),Program.Variable("d")))) (["a";"c";"b";"d";]);;*)
+		(*let init_table  =  get_val_list ([]) (z) 2 ;;*)
+		let rec print_list_of_int l = match l with
+		| [x] -> print_int x
+		| head :: tail -> print_int head;print_list_of_int tail;;
+
+
+		let rec iterate_hash size start l = if (size = 2) then [] else if (start = size) then (match Hashtbl.find table start with | (a,b,c) -> if List.mem (Hashtbl.find var_table a) l then l else (l@[Hashtbl.find var_table a]) ) else (match Hashtbl.find table start with | (a,b,c) -> if List.mem (Hashtbl.find var_table a) l then iterate_hash size (start+1) l else iterate_hash size (start+1) (l@[Hashtbl.find var_table a]) ) ;;
+		let rec get_all_vars start l = if (start = Hashtbl.length var_table) then l@[Hashtbl.find var_table start] else get_all_vars (start+1) l@[Hashtbl.find var_table start];;
+		let rec trim_l l1 l2 h = match l1 with
+		| [x] -> if List.mem x l2 then h else h@[x]
+
+
+				let rec subset l =
+					match l with
+					| [] -> [[]]
+					| (h::tl) ->
+											let second = subset tl in
+											List.append (List.map (fun x -> h::x) second) second;;
+
+				let rec remove_empty l u = match l with
+				| [x] -> if x = [] then u else u@[x]
+				| head :: tail -> if head = [] then remove_empty tail u else remove_empty tail u@[head];;
+
+				let subset1 l = remove_empty (subset l)  [];;
+
+				let rec remove_x l y = match l with
+				| [] -> []
+				| [x] -> if List.mem "-1" x then y else y@[x]
+				| head :: tail -> if List.mem "-1" head then (remove_x tail y) else (remove_x tail y@[head]);;
+
+				let rec comb_l l h j= match h with
+				| [x] -> j@[l@x]
+				| head :: tail -> comb_l l tail j@[l@head];;
+
+				let rec combine_list l1 l2 y = if l1 = [] then l2 else if l2 = [] then l1 else match l2 with
+				| [x] -> if List.mem x l1 then y@[x] else y@(comb_l x l1 [])
+				| head :: tail -> if List.mem head l1 then combine_list l1 tail y@[head] else combine_list l1 tail y@(comb_l head l1 []) ;;
+				(*let y_prime = trim_l (get_all_vars 1 ([])) (iterate_hash s_prime 2 ([])) ([]);;
+				let list_un = subset (y_prime);;
+				let list_imp = remove_x (f_asat s_prime) ([]);;
+
+				let z = combine_list list_imp list_un ([]);;*)
+
+				let rec trim_l l1 l2 h = match l1 with
+				| [x] -> if List.mem x l2 then h else h@[x]
+				| head :: tail -> if List.mem head l2 then trim_l tail l2 h else trim_l tail l2 h@[head];;
+
+				let rec print_list_x l = match l with
+				| [x] -> print_string x; print_string ";"
+				| head :: tail -> print_string head;print_string ";";print_list_x tail;;
+
+				let rec print_l_l l = match l with
+				| [x] -> print_list_x x;print_string "\n"
+				| head :: tail -> print_list_x head;print_string "\n";print_l_l tail;;
+
+				let final_asat node = remove_x (f_asat node) ([]);;
+				let all_sol node = if (Hashtbl.find global_flag 0 = 1 && not (List.mem (get_all_vars 1 ([])) (final_asat node))) then [(get_all_vars 1 ([]))]@(final_asat node) else (final_asat node);;
+				let r_sat node = combine_list (all_sol node) (subset (trim_l (get_all_vars 1 ([])) (iterate_hash node 2 ([])) ([]))) ([]);;
+
+				let rec f_all_sat1 node list_of_l var_list = if (node = 0) then (list_of_l@[["-1";]]) else if (node = 1) then (list_of_l@[[]]) else list_of_l@(if (get_low node =0) then [["-1"]] else combine_list (remove_x (f_all_sat1 (get_low node) (list_of_l) (var_list@[Hashtbl.find var_table (get_var node)])) []) ((subset (trim_l  (iterate_hash node 2 ([])) (var_list@[Hashtbl.find var_table (get_var node)]) ([]))    )) ([])  )@(add_var (get_var node) ((combine_list (remove_x (f_all_sat1 (get_high node) (list_of_l) (var_list@[Hashtbl.find var_table (get_var node)])) []) ((subset (trim_l (iterate_hash node 2 ([])) (var_list@[Hashtbl.find var_table (get_var node)]) ([])))) ([]) ) ) ([]));;
+				let f5 node = f_all_sat1 node [] [];;
+
+				let rec f_all_sat2 node list_of_l var_list = if (node = 0) then (list_of_l@[["-1";]]) else if (node = 1) then (list_of_l@[[]]) else list_of_l@(if (get_low node = 1) then  ( ((subset (trim_l (iterate_hash node 2 ([])) (var_list@[Hashtbl.find var_table (get_var node)]) ([]))))) else if (get_low node =0) then [["-1"]] else f_all_sat2 (get_low node)  list_of_l (var_list@[(Hashtbl.find var_table (get_var node))])  )@( if get_high node = 1 then  (add_var (get_var node) ((subset (trim_l (iterate_hash node 2 ([])) (var_list@[Hashtbl.find var_table (get_var node)]) ([])))) ([])  ) else if (get_high node =0) then [["-1"]] else (add_var (get_var node) (f_all_sat2 (get_high node)  list_of_l (var_list@[Hashtbl.find var_table (get_var node)])) ([])) );;
+				let f6 node = remove_x (f_all_sat2 node [] []) ([]);;
+
+				let rec get_val_list l size start = if (start = size) then (l@[size]) else (if (Hashtbl.mem table start) then (get_val_list (l@[start]) size (start+1)) else (get_val_list l size (start+1)));;
 
 		(*let z = f_robdd_prime (Program.OprBinary(Program.AND,Program.OprBinary(Program.IFF,Program.Variable("a"),Program.Variable("b")),Program.OprBinary(Program.IFF,Program.Variable("c"),Program.Variable("d")))) (["a";"c";"b";"d";]);;*)
 		(*let init_table  =  get_val_list ([]) (z) 2 ;;*)
@@ -171,72 +242,18 @@ module BDD = struct
 		   let file = open_out_bin "bdd.dot" in
 		   Dot.output_graph file g;;
 
-
-			 let bddFromExpr bexpr order = f_robdd_prime (bexpr) order  ;;
-
-
-			 		let sat_count bdd = f_count bdd ;;
-			 		let all_sat bdd = f_asat bdd ;;
-			 		let any_sat bdd =  f_sat bdd ;;
+				let bddFromExpr bexpr order = f_robdd_prime (bexpr) order  ;;
 
 
-		let to_dot bdd = make_dot bdd;;
+ 			 		let sat_count bdd = f_count bdd ;;
+ 			 		let all_sat bdd = f6 bdd ;;
+ 			 		let any_sat bdd =  f_sat bdd ;;
 
-		let s_prime = f_robdd (Program.OprBinary(Program.OR,Program.Variable("a"),Program.Variable("b"))) (["a";"b";]);;
 
-		let rec iterate_hash size start l = if (start = size) then (match Hashtbl.find table start with | (a,b,c) -> if List.mem (Hashtbl.find var_table a) l then l else (l@[Hashtbl.find var_table a]) ) else (match Hashtbl.find table start with | (a,b,c) -> if List.mem (Hashtbl.find var_table a) l then iterate_hash size (start+1) l else iterate_hash size (start+1) (l@[Hashtbl.find var_table a]) ) ;;
-		let rec get_all_vars start l = if (start = Hashtbl.length var_table) then l@[Hashtbl.find var_table start] else get_all_vars (start+1) l@[Hashtbl.find var_table start];;
-		let rec trim_l l1 l2 h = match l1 with
-		| [x] -> if List.mem x l2 then h else h@[x]
-		| head :: tail -> if List.mem head l2 then trim_l tail l2 h else trim_l tail l2 h@[head];;
-		print_int s_prime;;
-		let p = match Hashtbl.find table 2 with (a,b,c) -> a;;
-		print_int p;;
-		print_string (Hashtbl.find var_table p);;
+ 			 		let to_dot bdd = make_dot bdd;;
+					(*let z_prime = f_robdd_prime (Program.Constant(true)) ([]);;
+					make_dot z_prime;;*)
 
-		let rec subset l =
-			match l with
-			| [] -> [[]]
-			| (h::tl) ->
-									let second = subset tl in
-									List.append (List.map (fun x -> h::x) second) second;;
-
-		let rec remove_x l y = match l with
-		| [] -> []
-		| [x] -> if List.mem "-1" x then y else y@[x]
-		| head :: tail -> if List.mem "-1" head then (remove_x tail y) else (remove_x tail y@[head]);;
-
-		let rec comb_l l h j= match h with
-		| [x] -> j@[l@x]
-		| head :: tail -> comb_l l tail j@[l@head];;
-
-		let rec combine_list l1 l2 y = match l2 with
-		| [x] -> y@(comb_l x l1 [])
-		| head :: tail -> combine_list l1 tail y@(comb_l head l1 []) ;;
-		let y_prime = trim_l (get_all_vars 1 ([])) (iterate_hash s_prime 2 ([])) ([]);;
-		let list_un = subset (y_prime);;
-		let list_imp = remove_x (f_asat s_prime) ([]);;
-
-		let z = combine_list list_imp list_un ([]);;
-
-		let rec print_list_x l = match l with
-		| [x] -> print_string x; print_string ";"
-		| head :: tail -> print_string head;print_string ";";print_list_x tail;;
-
-		let rec print_l_l l = match l with
-		| [x] -> print_list_x x;print_string "\n"
-		| head :: tail -> print_list_x head;print_string "\n";print_l_l tail;;
-
-		let y = print_l_l z;;
-
-		print_string "\n***\n";;
-
-		print_list_x (iterate_hash s_prime 2 ([]));;
-		print_string "\n";
-		print_string "\n***\n";;
-		print_l_l list_imp;;
-		print_string "\n***\n";;
-		print_l_l (f_asat s_prime);;
 
 end  ;;
 
